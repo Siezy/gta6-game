@@ -7,7 +7,7 @@
 import { WORLD } from './config.js';
 import { SCREEN_PLAY, SCREEN_TITLE, stepGame } from './game.js';
 import { blankInput } from './input.js';
-import { makeCar, spawnPoliceCar } from './entities.js';
+import { makeCar, makePed, spawnPoliceCar } from './entities.js';
 
 function runSteps(game, audio, steps, input) {
   for (let i = 0; i < steps; i += 1) stepGame(game, input ?? blankInput(), audio);
@@ -49,20 +49,28 @@ export function stageShot(name, game, audio) {
   const player = game.player;
   if (name === 'drive') {
     game.screen = SCREEN_PLAY;
-    // East on the coast road in a red sports car, the beach and the sea
-    // coming into frame, traffic passing the other way.
-    const car = putPlayerInCar(game, 'sport', 2520, WORLD.roadsY[3] + 24, 0, 320);
+    // East on the coast road in a red sports car, timed so the run ends
+    // mid-intersection at the last cross street before the beach: a car
+    // is crossing in front of the hero and a pedestrian is stepping
+    // onto the crosswalk at the corner.
+    const car = putPlayerInCar(game, 'sport', 2631, WORLD.roadsY[3] + 24, 0, 320);
     car.paint = '#d90429';
-    const oncoming = makeCar(game.rng, 'sedan', 'traffic');
-    oncoming.axis = 'x';
-    oncoming.roadIndex = 3;
-    oncoming.dir = -1;
-    oncoming.x = 3180;
-    oncoming.y = WORLD.roadsY[3] - 24;
-    oncoming.angle = Math.PI;
-    oncoming.speed = oncoming.cruise * 0.8;
-    game.cars.push(oncoming);
-    placeTraffic(game, 5, 1, 1230, 'taxi');
+    placeTraffic(game, 6, 1, 1335, 'sedan'); // southbound, entering the crossing
+    const ped = makePed(game.rng, game.city);
+    let anchor = null;
+    let bestGap = Infinity;
+    for (const b of game.city.buildings) {
+      if (b.y + b.h > WORLD.roadsY[3] || b.x + b.w > WORLD.roadsX[6]) continue;
+      const gap = (WORLD.roadsY[3] - (b.y + b.h)) + (WORLD.roadsX[6] - (b.x + b.w));
+      if (gap < bestGap) { bestGap = gap; anchor = b; }
+    }
+    if (anchor) {
+      ped.anchor = anchor;
+      ped.corner = 2; // its south-east corner, the one by the intersection
+      ped.x = anchor.x + anchor.w + 15;
+      ped.y = anchor.y + anchor.h + 41;
+      game.peds.push(ped);
+    }
     const input = blankInput();
     input.up = true;
     runSteps(game, audio, 46, input);
@@ -70,14 +78,17 @@ export function stageShot(name, game, audio) {
   }
   if (name === 'chase') {
     game.screen = SCREEN_PLAY;
-    // Four stars on the east-west drag: three units already on the tail.
-    putPlayerInCar(game, 'sedan', 1330, WORLD.roadsY[2] + 24, 0, 330);
+    // Four stars on the east-west drag: the hero car out front in red,
+    // four units strung out behind and to the sides — close enough to
+    // read as a hunt, far enough back that the hero stays the subject.
+    const hero = putPlayerInCar(game, 'sedan', 1330, WORLD.roadsY[2] + 24, 0, 330);
+    hero.paint = '#d90429';
     game.wanted = 4.2;
     game.peakWanted = 4.2;
     game.lastCrime = 0;
     game.milestones.heat3 = true; // already earned before this frame
     game.milestones.sticky = true;
-    const spots = [[-185, -54], [-238, 42], [-335, -10]];
+    const spots = [[-290, -54], [-345, 16], [-455, -48], [-540, 20]];
     for (const [dx, dy] of spots) {
       const cop = spawnPoliceCar(game.rng, player.x, player.y);
       cop.x = player.x + dx;
@@ -90,18 +101,28 @@ export function stageShot(name, game, audio) {
     placeTraffic(game, 3, -1, 900, 'sedan');
     const input = blankInput();
     input.up = true;
-    runSteps(game, audio, 40, input);
+    runSteps(game, audio, 30, input);
     return;
   }
   if (name === 'mission') {
     game.screen = SCREEN_PLAY;
-    // On foot, a short walk from the package, the beacon in plain sight.
+    // Pulled up at the beacon in a car, the warehouse filling the frame
+    // behind it, traffic rolling past on the harbour road, the objective
+    // bar up: the delivery loop in one picture. The car stops just
+    // outside the pickup radius so the beacon stays on the package.
     const target = game.missions.target();
-    player.x = target.x - 128;
-    player.y = target.y + 92;
-    player.angle = Math.atan2(target.y - player.y, target.x - player.x);
-    game.camera.x = player.x + 60;
-    game.camera.y = player.y - 30;
+    const car = putPlayerInCar(game, 'sedan', target.x - 72, WORLD.roadsY[4] + 24, 0, 0);
+    car.paint = '#3f88c5';
+    const passing = makeCar(game.rng, 'sedan', 'traffic');
+    passing.axis = 'x';
+    passing.roadIndex = 4;
+    passing.dir = -1;
+    passing.x = target.x + 300;
+    passing.y = WORLD.roadsY[4] - 24;
+    passing.angle = Math.PI;
+    passing.speed = passing.cruise * 0.8;
+    game.cars.push(passing);
+    placeTraffic(game, 3, -1, 1700, 'taxi');
     runSteps(game, audio, 24, blankInput());
     return;
   }
